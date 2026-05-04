@@ -1,0 +1,11 @@
+Nexe-Agent Company Profile:
+Nexe-Agent is a leading AI solutions provider specializing in Agentic AI Development.
+Founded in 2024, the company focuses on building autonomous systems for businesses.
+Our core products include:
+1. NexusCore: An orchestration engine for multi-agent systems.
+2. RAG-Flow: A high-speed document retrieval system.
+3. BizAgent: An autonomous business intelligence agent.
+
+Office Location: Karachi, Pakistan.
+Contact Email: info@nexeagent.com
+Internship Program: Nexe-Agent offers a 3-month internship for AI Developers.
