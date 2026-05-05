@@ -1,92 +1,58 @@
 import json
 import os
-import re
-from typing import List, Dict
+import cohere
+from dotenv import load_dotenv
 
-class DocumentStore:
-    """Simulates a Vector Database with high-precision word matching."""
-    def __init__(self):
-        self.chunks: List[str] = []
+# Load environment variables from .env file
+load_dotenv()
 
-    def load_document(self, file_path: str):
+class ProfessionalRAGAssistant:
+    def __init__(self, knowledge_file: str):
+        self.api_key = os.getenv("COHERE_API_KEY")
+        if not self.api_key or self.api_key == "your_real_api_key_here":
+            raise ValueError("COHERE_API_KEY missing in .env file!")
+        
+        self.co = cohere.Client(self.api_key)
+        self.documents = self._load_documents(knowledge_file)
+
+    def _load_documents(self, file_path: str):
+        """Loads and formats documents for Cohere's RAG."""
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Document {file_path} not found.")
+            raise FileNotFoundError(f"File {file_path} not found.")
         
         with open(file_path, "r") as f:
             content = f.read()
-            # Split by double newlines for logical paragraphs
-            self.chunks = [chunk.strip() for chunk in content.split("\n\n") if chunk.strip()]
-        
-        print(f"[RAG] Successfully loaded {len(self.chunks)} knowledge chunks.")
-
-    def retrieve(self, query: str, top_k: int = 1) -> List[str]:
-        """
-        Uses Set Intersection for precision. 
-        Ensures 'me' doesn't match 'Development'.
-        """
-        # Clean and tokenize query into a set of unique words
-        query_words = set(re.findall(r'\b\w+\b', query.lower()))
-        
-        # Filter out common stop words to focus on meaning
-        STOP_WORDS = {"is", "the", "what", "are", "where", "about", "in", "to", "of", "and", "me", "tell"}
-        meaningful_query_words = query_words - STOP_WORDS
-        
-        if not meaningful_query_words:
-            return []
-
-        scored_chunks = []
-        for chunk in self.chunks:
-            # Tokenize chunk into a set of unique words
-            chunk_words = set(re.findall(r'\b\w+\b', chunk.lower()))
-            
-            # Count common words between query and chunk
-            matches = meaningful_query_words.intersection(chunk_words)
-            score = len(matches)
-            
-            if score >= 1:
-                scored_chunks.append((score, chunk))
-
-        scored_chunks.sort(key=lambda x: x[0], reverse=True)
-        return [chunk for score, chunk in scored_chunks[:top_k]]
-
-class RAGAssistant:
-    def __init__(self, knowledge_file: str):
-        self.store = DocumentStore()
-        self.store.load_document(knowledge_file)
-        # TEACHER NOTE: This is where you would initialize a real LLM client
-        self.api_key = os.getenv("AI_API_KEY", "MOCK_MODE")
+            # Cohere expects a list of dicts for RAG
+            return [{"title": "Company Profile", "snippet": content}]
 
     def ask(self, question: str) -> str:
-        print(f"\n[User Question]: {question}")
-        
-        # 1. Retrieval
-        context_chunks = self.store.retrieve(question)
-        
-        if not context_chunks:
+        print(f"\n[Real AI Querying]: {question}")
+        try:
+            response = self.co.chat(
+                message=question,
+                documents=self.documents,
+                model="command-nightly" # Reliable alias for latest features
+            )
+            
             return json.dumps({
-                "answer": "I'm sorry, I couldn't find any information about that in my knowledge base.",
-                "context_used": False,
-                "mode": "API_READY_" + self.api_key
+                "answer": response.text,
+                "citations": [c.start for c in response.citations] if hasattr(response, 'citations') else [],
+                "status": "success",
+                "engine": "Cohere Command-R+"
             }, indent=2)
 
-        # 2. Contextual Answer
-        context_text = " ".join(context_chunks)
-        return json.dumps({
-            "answer": f"STRICT CONTEXT ANSWER: {context_text[:150]}...",
-            "status": "success",
-            "context_used": True,
-            "mode": "API_READY_" + self.api_key
-        }, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
 
 if __name__ == "__main__":
     KNOWLEDGE_PATH = os.path.join(os.path.dirname(__file__), "knowledge.txt")
-    assistant = RAGAssistant(KNOWLEDGE_PATH)
-
-    # TEST: Hallucination Prevention (Weather in London)
-    # This should now return "I couldn't find any information"
-    print("--- [VERIFYING HALLUCINATION PREVENTION] ---")
-    print(assistant.ask("Tell me about the weather in London."))
     
-    # TEST: Accurate Retrieval (Location)
-    print("\n--- [VERIFYING ACCURATE RETRIEVAL] ---")
-    print(assistant.ask("Where is the Nexe-Agent office?"))
+    try:
+        assistant = ProfessionalRAGAssistant(KNOWLEDGE_PATH)
+        
+        # Test 1: Real RAG Answer
+        print("--- [TESTING REAL COHERE RAG] ---")
+        print(assistant.ask("What are the core products of Nexe-Agent?"))
+        
+    except Exception as e:
+        print(f"Setup Error: {e}")
